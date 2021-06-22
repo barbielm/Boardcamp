@@ -19,11 +19,11 @@ const connection = new Pool({
     database: 'boardcamp'
 });
 
-const categoriesSchema = Joi.object({
+const categorySchema = Joi.object({
     name: Joi.string().required()
 })
 
-const gamesSchema = Joi.object({
+const gameSchema = Joi.object({
     name: Joi.string().required(),
     image: Joi.string().pattern(new RegExp('^(https?:\\/\\/)?'+ // protocol
     '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|'+ // domain name
@@ -39,6 +39,13 @@ const gamesSchema = Joi.object({
 
 })
 
+const customerSchema = Joi.object({
+    name: Joi.string().required(),
+    phone: Joi.string().pattern(new RegExp('^[0-9]{10,11}$')).required(),
+    cpf: Joi.string().pattern(new RegExp('^[0-9]{11}$')).required(),
+    birthday: Joi.date().required()
+})
+
 
 server.get('/categories', async (req,res) => {
     const categories = await connection.query('SELECT * FROM categories');
@@ -46,7 +53,7 @@ server.get('/categories', async (req,res) => {
 })
 
 server.post('/categories', async (req,res) => {
-    const {error} = categoriesSchema.validate(req.body);
+    const {error} = categorySchema.validate(req.body);
     if(!error){
         const categoriesNames = await connection.query("SELECT * FROM categories");
         if(categoriesNames.rows.length !== 0){
@@ -81,7 +88,7 @@ server.get('/games', async (req,res) => {
 })
 
 server.post('/games', async (req,res) => {
-    const {error} = gamesSchema.validate(req.body);
+    const {error} = gameSchema.validate(req.body);
     if(!error){
         const gamesCategories = await connection.query("SELECT * FROM categories");
         if(checkIfCategoryExists(req.body, gamesCategories.rows)){
@@ -103,6 +110,65 @@ server.post('/games', async (req,res) => {
         return;
     }
     res.sendStatus(400);
+})
+
+server.get('/customers', async (req,res) => {
+    if(!req.query.cpf){
+        const customers = await connection.query("SELECT * FROM customers");
+        customers.rows.map(c => c.birthday = c.birthday.toISOString().substring(0,10));
+        res.send(customers.rows);
+    } else {
+        const customers = await connection.query("SELECT * FROM customers WHERE cpf LIKE $1",[req.query.cpf + "%"]);
+        customers.rows.map(c => c.birthday = c.birthday.toISOString().substring(0,10));
+        res.send(customers.rows);
+    }
+})
+
+server.get('/customers/:id', async (req,res) => {
+    const customer = await connection.query(`SELECT * FROM customers WHERE id = $1`,[parseInt(req.params.id)]);
+    customer.rows[0].birthday = customer.rows[0].birthday.toISOString().substring(0,10);
+    (customer.rows.length > 0) ? res.send(customer.rows[0]) : res.sendStatus(404);  
+})
+
+server.post('/customers', async (req,res) => {
+    const {error} = customerSchema.validate(req.body);
+    if(!error){
+        const {name,phone,cpf,birthday} = req.body;
+        const customers = await connection.query("SELECT * FROM customers");
+        if(customers.rows.length > 0){
+            for(let i = 0; i < customers.rows.length; i++){
+                if(customers.rows[i].cpf === req.body.cpf){
+                    res.sendStatus(409);
+                    return;
+                }
+            }
+        }
+        const insertNewCustomer = await connection.query(`INSERT INTO customers(name,phone,cpf,birthday) VALUES ($1,$2,$3,$4)`,[name,phone,cpf,birthday]);
+        res.sendStatus(201);
+    } else {
+        res.sendStatus(400);
+    }
+})
+
+server.put('/customers/:id', async (req,res) => {
+    const {error} = customerSchema.validate(req.body);
+    if(!error){
+        const customers = await connection.query("SELECT * FROM customers");
+        if(customers.rows.length > 0){
+            for(let i = 0; i < customers.rows.length; i++){
+                if(customers.rows[i].cpf === req.body.cpf){
+                    res.sendStatus(409);
+                    return;
+                }
+            }
+        }
+        const {name,phone,cpf,birthday} = req.body;
+        const updateCustomer = await connection.query(`UPDATE customers SET name = $1, phone = $2, cpf = $3, birthday = $4 WHERE id = $5`,[name,phone,cpf,birthday,req.params.id]);
+        res.sendStatus(200);
+    
+    } else {
+        res.sendStatus(400);
+    }
 })
 
 server.listen(4000);
