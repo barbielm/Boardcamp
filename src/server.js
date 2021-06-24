@@ -262,7 +262,7 @@ server.post('/rentals/:id/return', async (req,res) => {
         return;
     }
     
-    const delay = now.getDate() - existingId.rows[0].rentDate.getDate() - existingId.rows[0].daysRented;
+    const delay = Math.floor((now.getTime() - existingId.rows[0].rentDate.getTime())/(24*60*60*1000)) - existingId.rows[0].daysRented;
     
     if (delay > 0){
         const newDate = new Date(delay*existingId.rows[0].pricePerDay);
